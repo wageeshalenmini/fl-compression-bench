@@ -3,11 +3,13 @@
 from .problems import Problem, LeastSquares, LogisticRegression
 from .methods import Method, Message, GD
 from .simulator import run, History
-from .bits import FLOAT_BITS, dense_bits
+from .compressors import Compressor, Identity, RandK, TopK
+from .bits import FLOAT_BITS, SEED_BITS, dense_bits, index_bits, randk_bits, topk_bits
 
 __all__ = [
     "Problem", "LeastSquares", "LogisticRegression",
     "Method", "Message", "GD",
     "run", "History",
-    "FLOAT_BITS", "dense_bits",
+    "Compressor", "Identity", "RandK", "TopK",
+    "FLOAT_BITS", "SEED_BITS", "dense_bits", "index_bits", "randk_bits", "topk_bits",
 ]

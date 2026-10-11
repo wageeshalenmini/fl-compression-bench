@@ -15,7 +15,7 @@ This is a benchmark study. It does not propose a new method.
 | --- | --- | --- |
 | 1 | Reading: update rules and theoretical stepsizes of each method | in progress |
 | 2 | Core simulator: devices, server, full local gradients, bit counter | done |
-| 3 | Compressors: Rand-k, Top-k | to do |
+| 3 | Compressors: Rand-k, Top-k, with bit costs | done |
 | 4 | Methods: compressed GD, DIANA, classic error feedback, EF21 | to do |
 | 5 | Channel estimation task with least squares and LMMSE baselines | to do |
 | 6 | Experiments | to do |
@@ -29,11 +29,14 @@ fedcomp/
   methods.py    Method interface (device_step / server_step) and uncompressed GD
   simulator.py  the training loop and the History record
   bits.py       bit accounting for uplink messages
+  compressors.py  Identity, Rand-k (scaled and unscaled), Top-k
   data.py       synthetic data, LibSVM loader, IID and by-label splits
 tests/
-  test_core.py  tests for step 2
+  test_core.py         tests for step 2
+  test_compressors.py  tests for step 3
 scripts/
-  run_baseline.py  demo run of uncompressed federated GD
+  run_baseline.py      demo run of uncompressed federated GD
+  show_compressors.py  each compressor applied to one example vector
 ```
 
 ## Setup
@@ -76,6 +79,19 @@ real number costing 32 bits.
 - GD reaches the exact least squares solution
 - the smoothness bound holds on random pairs of points
 - the bit counter: `rounds * 32 * d` per device for uncompressed GD
+
+## What the step 3 tests check
+
+- Rand-k is exactly unbiased and its variance is exactly `(d/k - 1) ||x||^2`,
+  verified by listing every possible mask on a five-entry vector
+- the random sampler agrees with that theory over 40,000 draws and picks
+  every coordinate equally often
+- the same seed reproduces the same mask, which is what lets the server
+  rebuild it without receiving positions
+- Top-k keeps the largest magnitudes and satisfies
+  `||C(x) - x||^2 <= (1 - k/d) ||x||^2`, with equality for equal magnitudes
+- bit costs: Rand-k is `32k + 32` (values plus a seed), Top-k is
+  `k (32 + ceil(log2 d))` (values plus positions)
 
 ## References
 
