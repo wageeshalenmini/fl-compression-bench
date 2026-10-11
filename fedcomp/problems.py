@@ -143,3 +143,66 @@ def _sigmoid(t):
     e = np.exp(t[~pos])
     out[~pos] = e / (1.0 + e)
     return out
+
+
+class LinearEstimation(Problem):
+    """Learn a matrix W that maps an observation y to a target h.
+
+    Device i holds m_i pairs (y, h), stored as rows of Y_i (m_i x q) and
+    H_i (m_i x r). Its loss is
+
+        F_i(W) = 1/(2 m_i) * sum_j ||W y_j - h_j||^2
+
+    The model vector x is W written out row by row, so d = r * q. This is a
+    convex quadratic problem with a known exact minimizer, which makes it a
+    good first model for channel estimation: the best W is the (sample)
+    linear minimum mean squared error estimator.
+    """
+
+    def __init__(self, Y_list, H_list):
+        if len(Y_list) != len(H_list) or len(Y_list) == 0:
+            raise ValueError("need one (Y, H) pair per device, and at least one device")
+        self.A = [np.asarray(Y, dtype=float) for Y in Y_list]   # observations
+        self.b = [np.asarray(H, dtype=float) for H in H_list]   # targets
+        self.q = self.A[0].shape[1]
+        self.r = self.b[0].shape[1]
+        for Y, H in zip(self.A, self.b):
+            if Y.ndim != 2 or H.ndim != 2 or Y.shape[1] != self.q or H.shape[1] != self.r \
+                    or Y.shape[0] != H.shape[0]:
+                raise ValueError("inconsistent data shapes across devices")
+        self.n = len(self.A)
+        self.d = self.r * self.q
+        self.m = np.array([Y.shape[0] for Y in self.A])
+        self.p = self.m / self.m.sum()
+
+    def matrix(self, x: np.ndarray) -> np.ndarray:
+        """The model vector as the r x q matrix W."""
+        return np.asarray(x).reshape(self.r, self.q)
+
+    def local_loss(self, i, x):
+        E = self.A[i] @ self.matrix(x).T - self.b[i]
+        return float(np.sum(E * E)) / (2 * self.m[i])
+
+    def local_grad(self, i, x):
+        E = self.A[i] @ self.matrix(x).T - self.b[i]
+        return (E.T @ self.A[i] / self.m[i]).ravel()
+
+    def local_smoothness(self, i):
+        return float(np.linalg.eigvalsh(self.A[i].T @ self.A[i] / self.m[i])[-1])
+
+    def smoothness(self):
+        C = sum(self.p[i] * self.A[i].T @ self.A[i] / self.m[i] for i in range(self.n))
+        return float(np.linalg.eigvalsh(C)[-1])
+
+    def strong_convexity(self) -> float:
+        C = sum(self.p[i] * self.A[i].T @ self.A[i] / self.m[i] for i in range(self.n))
+        return float(np.linalg.eigvalsh(C)[0])
+
+    def solution(self) -> np.ndarray:
+        """Exact minimizer of F, as a model vector."""
+        Y = np.vstack(self.A)
+        H = np.vstack(self.b)
+        return np.linalg.lstsq(Y, H, rcond=None)[0].T.ravel()
+
+    def _pooled_args(self):
+        return [np.vstack(self.A)], [np.vstack(self.b)]

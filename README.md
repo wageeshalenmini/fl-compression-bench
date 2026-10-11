@@ -17,7 +17,7 @@ This is a benchmark study. It does not propose a new method.
 | 2 | Core simulator: devices, server, full local gradients, bit counter | done |
 | 3 | Compressors: Rand-k, Top-k, with bit costs | done |
 | 4 | Methods: compressed GD (DCGD), DIANA, classic error feedback, EF21 | done |
-| 5 | Channel estimation task with least squares and LMMSE baselines | to do |
+| 5 | Channel estimation task with least squares and LMMSE baselines | done |
 | 6 | Experiments | to do |
 | 7 | Report | to do |
 
@@ -25,7 +25,8 @@ This is a benchmark study. It does not propose a new method.
 
 ```
 fedcomp/
-  problems.py   LeastSquares and LogisticRegression as sums over devices
+  problems.py   LeastSquares, LogisticRegression and LinearEstimation as sums over devices
+  channel.py    channel model, pilots, least squares and LMMSE estimators, error measures
   methods.py    GD, DCGD, DIANA, EF and EF21, each split into device_step / server_step
   simulator.py  the training loop and the History record
   bits.py       bit accounting for uplink messages
@@ -35,10 +36,12 @@ tests/
   test_core.py         tests for step 2
   test_compressors.py  tests for step 3
   test_methods.py      tests for step 4
+  test_channel.py      tests for step 5
 scripts/
   run_baseline.py      demo run of uncompressed federated GD
   show_compressors.py  each compressor applied to one example vector
   compare_methods.py   all methods at an equal bit budget, with a plot
+  channel_baselines.py estimation error against SNR for the baselines, with a plot
 ```
 
 ## Setup
@@ -133,6 +136,54 @@ method. On the synthetic data:
 
 This is synthetic data with 50 parameters. It checks that the methods show
 the qualitative behaviour reported in the papers. It is not yet a result.
+
+## The channel estimation task
+
+A base station with 64 antennas sends 32 pilot symbols. A single-antenna
+user receives `y = P h + noise` and must estimate its channel `h` (64 complex
+numbers) from `y` (32 complex numbers). Channels are sums of 3 paths whose
+angles lie in the user's own 10 degree sector, and the 20 users' sector
+centres are spread over 30 degrees, so every user's data is different.
+
+The model trained federatedly is one matrix `W` shared by all users, with
+`h_hat = W y`. In real numbers it has 128 x 64 = 8192 parameters. This model
+is convex and its best possible value is known: it is the LMMSE estimator for
+the users' average covariance. That gives every training run an exact target.
+
+`python scripts/channel_baselines.py` gives (NMSE in dB):
+
+| SNR (dB) | Least squares | Shared LMMSE | Per-user LMMSE | Shared, federated GD |
+| --- | --- | --- | --- | --- |
+| -10 | 10.07 | -0.57 | -1.65 | -0.55 |
+| 0 | 1.66 | -3.05 | -6.87 | -3.03 |
+| 10 | -2.26 | -8.30 | -15.19 | -8.28 |
+| 20 | -2.94 | -15.79 | -24.39 | -15.80 |
+
+![baselines](results/step5_baselines.png)
+
+Least squares cannot recover 64 unknowns from 32 pilots. The federated
+estimator, trained on samples only, matches the shared LMMSE estimator built
+from the true covariance. The gap to per-user LMMSE is the price of one model
+for all users.
+
+Limits of the setup: the true channel is used as the training label, which a
+real handset does not have; the uplink is error-free; the downlink is not
+counted.
+
+## What the step 5 tests check
+
+- steering vectors and pilot rows have unit norm, channel power is N, noise
+  power is as configured
+- the exact covariance (numerical integration) matches the sample covariance
+- the closed-form error of a linear estimator matches simulation, for least
+  squares and LMMSE at several SNRs
+- LMMSE is the best linear estimator: every perturbation increases the error
+- ordering at every SNR: least squares, then shared LMMSE, then per-user LMMSE
+- the real-valued matrix acts exactly like the complex one
+- gradient of the estimation problem against finite differences; federated
+  training equals pooled training; GD reaches the exact solution
+- the trained estimator is within 0.15 dB of the shared LMMSE
+- EF21 with Top-k trains the estimator to within 2% of the best error
 
 ## References
 
