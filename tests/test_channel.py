@@ -153,6 +153,14 @@ def test_linear_estimation_gradient_matches_finite_differences():
     assert np.linalg.norm(prob.grad(prob.solution())) < 1e-10
 
 
+def test_fast_loss_equals_loss_computed_from_the_data():
+    prob = estimation_problem(make_dataset(ChannelConfig(**SMALL)))
+    rng = np.random.default_rng(0)
+    for x in (np.zeros(prob.d), rng.standard_normal(prob.d), prob.solution()):
+        for i in range(prob.n):
+            assert prob.local_loss(i, x) == pytest.approx(prob.local_loss_direct(i, x), rel=1e-9)
+
+
 def test_federated_training_equals_pooled_training():
     prob = estimation_problem(make_dataset(ChannelConfig(**SMALL)))
     gamma = 1.0 / prob.smoothness()

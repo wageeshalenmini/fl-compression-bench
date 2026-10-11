@@ -174,29 +174,45 @@ class LinearEstimation(Problem):
         self.d = self.r * self.q
         self.m = np.array([Y.shape[0] for Y in self.A])
         self.p = self.m / self.m.sum()
+        # The gradient (W Y^T - H^T) Y / m equals W C - B with the two small
+        # matrices below, computed once. This makes a round much cheaper than
+        # multiplying by the full data every time, and gives the same result.
+        self._C = [Y.T @ Y / m for Y, m in zip(self.A, self.m)]            # q x q
+        self._B = [H.T @ Y / m for Y, H, m in zip(self.A, self.b, self.m)]  # r x q
+        self._h2 = [float(np.sum(H * H)) / m for H, m in zip(self.b, self.m)]
 
     def matrix(self, x: np.ndarray) -> np.ndarray:
         """The model vector as the r x q matrix W."""
         return np.asarray(x).reshape(self.r, self.q)
 
     def local_loss(self, i, x):
+        # ||W y - h||^2 summed over the data, expanded so that only the small
+        # matrices are needed:  tr(W C W^T) - 2 tr(B W^T) + mean ||h||^2
+        W = self.matrix(x)
+        return 0.5 * (float(np.sum((W @ self._C[i]) * W)) - 2 * float(np.sum(self._B[i] * W))
+                      + self._h2[i])
+
+    def local_loss_direct(self, i, x):
+        """The same loss computed from the data itself (slow; used in tests)."""
         E = self.A[i] @ self.matrix(x).T - self.b[i]
         return float(np.sum(E * E)) / (2 * self.m[i])
 
     def local_grad(self, i, x):
-        E = self.A[i] @ self.matrix(x).T - self.b[i]
-        return (E.T @ self.A[i] / self.m[i]).ravel()
+        return (self.matrix(x) @ self._C[i] - self._B[i]).ravel()
+
+    def grad(self, x):
+        C = sum(p * C for p, C in zip(self.p, self._C))
+        B = sum(p * B for p, B in zip(self.p, self._B))
+        return (self.matrix(x) @ C - B).ravel()
 
     def local_smoothness(self, i):
-        return float(np.linalg.eigvalsh(self.A[i].T @ self.A[i] / self.m[i])[-1])
+        return float(np.linalg.eigvalsh(self._C[i])[-1])
 
     def smoothness(self):
-        C = sum(self.p[i] * self.A[i].T @ self.A[i] / self.m[i] for i in range(self.n))
-        return float(np.linalg.eigvalsh(C)[-1])
+        return float(np.linalg.eigvalsh(sum(p * C for p, C in zip(self.p, self._C)))[-1])
 
     def strong_convexity(self) -> float:
-        C = sum(self.p[i] * self.A[i].T @ self.A[i] / self.m[i] for i in range(self.n))
-        return float(np.linalg.eigvalsh(C)[0])
+        return float(np.linalg.eigvalsh(sum(p * C for p, C in zip(self.p, self._C)))[0])
 
     def solution(self) -> np.ndarray:
         """Exact minimizer of F, as a model vector."""

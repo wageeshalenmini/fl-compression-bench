@@ -18,7 +18,8 @@ This is a benchmark study. It does not propose a new method.
 | 3 | Compressors: Rand-k, Top-k, with bit costs | done |
 | 4 | Methods: compressed GD (DCGD), DIANA, classic error feedback, EF21 | done |
 | 5 | Channel estimation task with least squares and LMMSE baselines | done |
-| 6 | Experiments | to do |
+| 6 | Experiments A, B, C on the linear estimator | done |
+| 6b | a9a validation; neural network estimator; theoretical stepsizes of the other methods | to do |
 | 7 | Report | to do |
 
 ## Layout
@@ -32,16 +33,20 @@ fedcomp/
   bits.py       bit accounting for uplink messages
   compressors.py  Identity, Rand-k (scaled and unscaled), Top-k
   data.py       synthetic data, LibSVM loader, IID and by-label splits
+  experiments.py  equal-budget runs with the same stepsize search for every method
 tests/
   test_core.py         tests for step 2
   test_compressors.py  tests for step 3
   test_methods.py      tests for step 4
   test_channel.py      tests for step 5
+  test_experiments.py  tests for step 6
 scripts/
   run_baseline.py      demo run of uncompressed federated GD
   show_compressors.py  each compressor applied to one example vector
   compare_methods.py   all methods at an equal bit budget, with a plot
   channel_baselines.py estimation error against SNR for the baselines, with a plot
+  run_experiments.py   step 6 experiments (about 15 minutes); --quick for a short check
+  plot_experiments.py  tables and figures from the saved results
 ```
 
 ## Setup
@@ -184,6 +189,72 @@ counted.
   training equals pooled training; GD reaches the exact solution
 - the trained estimator is within 0.15 dB of the shared LMMSE
 - EF21 with Top-k trains the estimator to within 2% of the best error
+
+## Results on the channel estimator
+
+Setup: the default system at 10 dB SNR. Every method has a budget of 30
+uncompressed uploads (7.86 Mbit per device) and the same stepsize search
+(1/L times a power of two from 1/128 to 4). The stepsize kept is the one
+that gets within 0.1 dB of the best error the model can reach (-8.28 dB)
+with the fewest bits. Rand-k methods are averaged over 3 seeds.
+
+### A. Bits needed, at three compression levels
+
+Mbit uploaded per device to get within 0.1 dB of the best error:
+
+| Method | keep 1% | keep 5% | keep 10% |
+| --- | --- | --- | --- |
+| GD (no compression) | 7.86 | 7.86 | 7.86 |
+| DCGD + Top-k | not reached | not reached | not reached |
+| EF + Top-k | 1.64 | 1.64 | 1.95 |
+| EF21 + Top-k | 0.50 | 0.63 | 0.77 |
+| DCGD + Rand-k | 7.27 | 6.87 | 6.43 |
+| DIANA + Rand-k | 1.73 | 1.67 | 1.86 |
+
+![main](results/step6_main.png)
+
+- EF21 with Top-k needs about 16 times fewer bits than uncompressed GD.
+- DIANA and classic error feedback need about 4 to 5 times fewer.
+- DCGD with Top-k stalls 1.3 to 3.5 dB above the best error.
+- DCGD with Rand-k gets there, but saves almost nothing over GD.
+
+### B. When the users' data differs more
+
+Mbit to the same target, keeping 5% of coordinates. The best reachable error
+itself changes with the spread, so compare methods within a column.
+
+| Method | spread 0 | spread 15 | spread 30 | spread 60 |
+| --- | --- | --- | --- | --- |
+| best reachable NMSE (dB) | -14.93 | -11.16 | -8.28 | -4.86 |
+| GD (no compression) | not reached | 7.08 | 7.86 | 5.77 |
+| DCGD + Top-k | not reached | not reached | not reached | not reached |
+| EF + Top-k | 0.44 | 0.66 | 1.64 | 2.31 |
+| EF21 + Top-k | 1.35 | 0.83 | 0.63 | 0.48 |
+| DCGD + Rand-k | 1.47 | 2.75 | 6.87 | not reached |
+| DIANA + Rand-k | 1.97 | 1.71 | 1.67 | 1.49 |
+
+![heterogeneity](results/step6_heterogeneity.png)
+
+- When all users are alike, classic error feedback is the cheapest and plain
+  DCGD with Rand-k works well.
+- As users differ more, both degrade, while EF21 and DIANA do not.
+
+### C. EF21: the theorem's stepsize against the best found
+
+| Kept | Theorem | Tuned | Ratio | Reaches the target within budget at the theorem's stepsize? |
+| --- | --- | --- | --- | --- |
+| 1% | 0.0022/L | 1/L | 462 | no |
+| 5% | 0.011/L | 2/L | 181 | no |
+| 10% | 0.023/L | 2/L | 88 | no |
+
+### Limits of these results
+
+- one dataset draw, one SNR, a convex model, full local gradients
+- the Top-k methods are deterministic, so they are single runs
+- bits to target are read off logged points, about 400 per run
+- the tolerance (0.1 dB), the budget and the stepsize criterion are choices;
+  other choices could change the ranking of close methods
+- only the uplink is counted
 
 ## References
 

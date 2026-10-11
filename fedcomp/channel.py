@@ -200,10 +200,11 @@ def test_nmse_metric(ds: ChannelDataset, problem: LinearEstimation, user: int | 
     Y = np.vstack([to_real(Y) for Y, _ in pairs])
     H = np.vstack([to_real(H) for _, H in pairs])
     denom = float(np.sum(H * H))
+    C, B = Y.T @ Y, H.T @ Y      # small matrices, so that each evaluation is cheap
 
     def metric(x):
-        E = Y @ problem.matrix(x).T - H
-        return float(np.sum(E * E)) / denom
+        W = problem.matrix(x)
+        return (float(np.sum((W @ C) * W)) - 2 * float(np.sum(B * W)) + denom) / denom
 
     return metric
 
