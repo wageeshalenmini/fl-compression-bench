@@ -5,5 +5,4 @@ __pycache__/
 venv/
 .vscode/
 data/
-results/
 *.egg-info/

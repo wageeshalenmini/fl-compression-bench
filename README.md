@@ -16,7 +16,7 @@ This is a benchmark study. It does not propose a new method.
 | 1 | Reading: update rules and theoretical stepsizes of each method | in progress |
 | 2 | Core simulator: devices, server, full local gradients, bit counter | done |
 | 3 | Compressors: Rand-k, Top-k, with bit costs | done |
-| 4 | Methods: compressed GD, DIANA, classic error feedback, EF21 | to do |
+| 4 | Methods: compressed GD (DCGD), DIANA, classic error feedback, EF21 | done |
 | 5 | Channel estimation task with least squares and LMMSE baselines | to do |
 | 6 | Experiments | to do |
 | 7 | Report | to do |
@@ -26,7 +26,7 @@ This is a benchmark study. It does not propose a new method.
 ```
 fedcomp/
   problems.py   LeastSquares and LogisticRegression as sums over devices
-  methods.py    Method interface (device_step / server_step) and uncompressed GD
+  methods.py    GD, DCGD, DIANA, EF and EF21, each split into device_step / server_step
   simulator.py  the training loop and the History record
   bits.py       bit accounting for uplink messages
   compressors.py  Identity, Rand-k (scaled and unscaled), Top-k
@@ -34,9 +34,11 @@ fedcomp/
 tests/
   test_core.py         tests for step 2
   test_compressors.py  tests for step 3
+  test_methods.py      tests for step 4
 scripts/
   run_baseline.py      demo run of uncompressed federated GD
   show_compressors.py  each compressor applied to one example vector
+  compare_methods.py   all methods at an equal bit budget, with a plot
 ```
 
 ## Setup
@@ -93,8 +95,48 @@ real number costing 32 bits.
 - bit costs: Rand-k is `32k + 32` (values plus a seed), Top-k is
   `k (32 + ceil(log2 d))` (values plus positions)
 
+## What the step 4 tests check
+
+- with no compression (identity, or k = d) every method reproduces plain
+  gradient descent
+- DCGD with Top-1 diverges on the three-quadratics example of Beznosikov et
+  al., and one step matches the hand calculation `x <- (1 + 11 gamma / 6) x`
+- DCGD with Rand-k stalls at a floor proportional to the stepsize
+- DIANA converges to the exact least squares solution where DCGD stalls, and
+  its shifts `h_i` converge to the local gradients at the solution
+- classic error feedback: the virtual iterate `x - sum_i p_i e_i` follows
+  exact gradient descent
+- EF21: the server's estimate equals the weighted device estimates in every
+  round, the method converges where DCGD diverges, and the measured average
+  squared gradient norm is below the bound of the paper's theorem at the
+  theorem's stepsize
+- bit counts per round, reproducibility from the seed, independent masks
+  across devices
+
+## First comparison
+
+`python scripts/compare_methods.py` runs all methods on logistic regression
+with a nonconvex regularizer, 20 devices with very different data, at
+100,000 uploaded bits per device, with the same stepsize search for each
+method. On the synthetic data:
+
+| Method | Bits per round | Final squared gradient norm |
+| --- | --- | --- |
+| GD (no compression) | 1600 | 6.2e-22 |
+| DCGD + Top-1 | 38 | 1.4e-02 |
+| EF + Top-1 | 38 | 5.7e-06 |
+| EF21 + Top-1 | 38 | 4.3e-33 |
+| DCGD + Rand-2 | 96 | 3.7e-04 |
+| DIANA + Rand-2 | 96 | 2.0e-21 |
+
+![comparison](results/step4_comparison.png)
+
+This is synthetic data with 50 parameters. It checks that the methods show
+the qualitative behaviour reported in the papers. It is not yet a result.
+
 ## References
 
 - Konečný, McMahan, Yu, Richtárik, Suresh, Bacon. Federated Learning: Strategies for Improving Communication Efficiency. arXiv:1610.05492
 - Mishchenko, Gorbunov, Takáč, Richtárik. Distributed Learning with Compressed Gradient Differences (DIANA). arXiv:1901.09269
+- Beznosikov, Horváth, Richtárik, Safaryan. On Biased Compression for Distributed Learning. arXiv:2002.12410
 - Richtárik, Sokolov, Fatkhullin. EF21: A New, Simpler, Theoretically Better, and Practically Faster Error Feedback. arXiv:2106.05203

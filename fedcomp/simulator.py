@@ -43,16 +43,20 @@ class History:
 
 def run(problem: Problem, method: Method, gamma: float, rounds: int,
         x0: np.ndarray | None = None, metrics: dict | None = None,
-        log_every: int = 1, divergence_threshold: float = 1e12) -> History:
+        log_every: int = 1, divergence_threshold: float = 1e12,
+        seed: int = 0, callback=None) -> History:
     """Train for `rounds` rounds and return the History.
 
-    metrics: optional {name: function(x) -> float}, evaluated at every logged
-             round (for example test error of a channel estimator).
+    metrics:  optional {name: function(x) -> float}, evaluated at every logged
+              round (for example test error of a channel estimator).
+    seed:     seeds the devices' random generators (used by random compressors).
+    callback: optional function(t, x, method), called at the start of every
+              round. Used by tests to inspect a method's internal state.
     """
     if gamma <= 0:
         raise ValueError("gamma must be positive")
     x = np.zeros(problem.d) if x0 is None else np.array(x0, dtype=float)
-    method.setup(problem.n, problem.d, problem.p)
+    method.setup(problem.n, problem.d, problem.p, seed)
 
     hist = History(method=method.name, gamma=gamma,
                    extra={k: [] for k in (metrics or {})})
@@ -72,6 +76,8 @@ def run(problem: Problem, method: Method, gamma: float, rounds: int,
             if not np.isfinite(hist.loss[-1]) or hist.loss[-1] > divergence_threshold:
                 hist.diverged = True
                 break
+        if callback is not None:
+            callback(t, x, method)
         messages = []
         for i in range(problem.n):
             grad_i = problem.local_grad(i, x)                # on device i
