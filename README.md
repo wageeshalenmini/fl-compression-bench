@@ -19,7 +19,8 @@ This is a benchmark study. It does not propose a new method.
 | 4 | Methods: compressed GD (DCGD), DIANA, classic error feedback, EF21 | done |
 | 5 | Channel estimation task with least squares and LMMSE baselines | done |
 | 6 | Experiments A, B, C on the linear estimator | done |
-| 6b | a9a validation; neural network estimator; theoretical stepsizes of the other methods | to do |
+| 6b | Check on a9a | done |
+| 6c | Neural network estimator; theoretical stepsizes of the other methods | optional |
 | 7 | Report | to do |
 
 ## Layout
@@ -141,6 +142,28 @@ method. On the synthetic data:
 
 This is synthetic data with 50 parameters. It checks that the methods show
 the qualitative behaviour reported in the papers. It is not yet a result.
+
+## Check on a9a
+
+`python scripts/compare_methods.py --data data/a9a` (LibSVM a9a, 123
+parameters, 20 devices, split by label, 100,000 uploaded bits per device):
+
+| Method | Best stepsize | Final squared gradient norm |
+| --- | --- | --- |
+| GD (no compression) | 2/L | 4.6e-08 |
+| DCGD + Top-1 | 2/L | 4.4e-02 |
+| EF + Top-1 | 0.0156/L | 4.0e-05 |
+| EF21 + Top-1 | 2/L | 4.1e-33 |
+| DCGD + Rand-2 | 0.0156/L | 1.9e-03 |
+| DIANA + Rand-2 | 0.125/L | 2.4e-10 |
+
+![a9a](results/a9a_comparison.png)
+
+The qualitative behaviour matches the EF21 paper: plain Top-k is stuck,
+classic error feedback stalls and needs a much smaller stepsize, EF21
+converges. The data split is ours, so the curves are not a reproduction of
+the paper's figures. The dataset is not stored in this repository: download
+`a9a` from the LibSVM datasets page into a `data` folder.
 
 ## The channel estimation task
 
