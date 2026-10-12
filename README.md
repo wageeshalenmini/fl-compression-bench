@@ -21,7 +21,7 @@ This is a benchmark study. It does not propose a new method.
 | 6 | Experiments A, B, C on the linear estimator | done |
 | 6b | Check on a9a | done |
 | 6c | Neural network estimator; theoretical stepsizes of the other methods | optional |
-| 7 | Report | to do |
+| 7 | Report | done |
 
 ## Layout
 
